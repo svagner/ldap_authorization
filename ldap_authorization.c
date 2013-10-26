@@ -66,7 +66,7 @@ get_full_user_path(char *user, const char* ldap_authorization_basedn) {
 		ldap_set_option(ldapsession, LDAP_OPT_PROTOCOL_VERSION, &tls_version);
 		if((rc = ldap_start_tls_s(ldapsession, NULL,NULL))!=LDAP_SUCCESS)
 		{
-		    sprintf(logbuf, "Ldap start TLS error: %s. ", ldap_err2string(rc));	
+		    snprintf(logbuf, MAXLOGBUF, "Ldap start TLS error: %s. ", ldap_err2string(rc));	
 		    ldap_log(LOG_WARNING, logbuf);
 		}
 	}
@@ -81,14 +81,14 @@ get_full_user_path(char *user, const char* ldap_authorization_basedn) {
 #else	
 	if((rc = ldap_simple_bind_s(ldapsession, ldap_authorization_binddn, ldap_authorization_bindpasswd))!=LDAP_SUCCESS) {
 #endif
-		sprintf(logbuf, "Ldap server %s authentificate failed: %s", ldap_authorization_host, ldap_err2string(rc));	
+		snprintf(logbuf, MAXLOGBUF, "Ldap server %s authentificate failed: %s", ldap_authorization_host, ldap_err2string(rc));	
 		ldap_log(LOG_DEBUG, logbuf);
 		return NULL;
 	};
 
 	/* create filter for search */
 	memset(filter, 0, MAXFILTERSTR);
-	sprintf(filter, "(uid=%s)", user);
+	snprintf(filter, MAXLOGBUF, "(uid=%s)", user);
 
 	if ((rc = ldap_search_ext_s(ldapsession, ldap_authorization_basedn, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, LDAP_NO_LIMIT, &res)) != LDAP_SUCCESS) {
 #if LDAP_API_VERSION > 3003
@@ -141,7 +141,7 @@ check_ldap_user(char *user, unsigned char *pass, const char *ldap_authorization_
 		ldap_set_option(ldapsession, LDAP_OPT_PROTOCOL_VERSION, &tls_version);
 		if((rc = ldap_start_tls_s(ldapsession, NULL,NULL))!=LDAP_SUCCESS)
 		{
-		    sprintf(logbuf, "Ldap start TLS error: %s", ldap_err2string(rc));	
+		    snprintf(logbuf, MAXLOGBUF, "Ldap start TLS error: %s", ldap_err2string(rc));	
 		    ldap_log(LOG_WARNING, logbuf);
 		    memset(logbuf, 0, MAXLOGBUF);
 		}
@@ -149,27 +149,27 @@ check_ldap_user(char *user, unsigned char *pass, const char *ldap_authorization_
 
 	/* Check authorization */
 	if ((userdn = get_full_user_path(user, ldap_authorization_basedn))==NULL) {
-		sprintf(logbuf, "User %s not fount in LDAP catalog (basedn=%s)", user, ldap_authorization_basedn);	
+		snprintf(logbuf, MAXLOGBUF, "User %s not fount in LDAP catalog (basedn=%s)", user, ldap_authorization_basedn);	
 		ldap_log(LOG_DEBUG, logbuf);
 		return NULL;
 	}
 #if LDAP_API_VERSION > 3003
 	struct berval cred;
 	struct berval *msgidp=NULL;
-	strcpy(cred.bv_val, (const char *)pass);
 	cred.bv_len = strlen((const char *)pass);
+	strcpy(cred.bv_val, (const char *)pass, cred.bv_len);
 	if((rc = ldap_sasl_bind_s(ldapsession, userdn, "DIGEST-MD5", &cred, NULL, NULL, &msgidp))!=LDAP_SUCCESS) {
 #else	
 	if((rc = ldap_simple_bind_s(ldapsession, userdn, pass))!=LDAP_SUCCESS) {
 #endif
-		sprintf(logbuf, "Ldap authentificate failed: %s", ldap_err2string(rc)); 	
+		snprintf(logbuf, MAXLOGBUF, "Ldap authentificate failed: %s", ldap_err2string(rc)); 	
 		ldap_log(LOG_DEBUG, logbuf); 
 		return NULL;
 	};
 
 	/* create filter for search */
 	memset(filter, 0, 100);
-	sprintf(filter, "(&(objectClass=posixGroup)(memberUid=%s))", user);
+	snprintf(filter, MAXLOGBUF, "(&(objectClass=posixGroup)(memberUid=%s))", user);
 
 	if ((rc = ldap_search_ext_s(ldapsession, ldap_authorization_basedn, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, LDAP_NO_LIMIT, &res)) != LDAP_SUCCESS) {
 #if LDAP_API_VERSION > 3003
@@ -183,7 +183,7 @@ check_ldap_user(char *user, unsigned char *pass, const char *ldap_authorization_
 	for (entry = ldap_first_entry(ldapsession,res); entry!=NULL && count<ldap_count_messages(ldapsession, res); entry=ldap_next_entry(ldapsession, res)) {
 		count++;
 		for(attr = ldap_first_attribute(ldapsession,entry,&ber); attr != NULL ; attr=ldap_next_attribute(ldapsession,entry,ber)) {
-			sprintf(logbuf, "Found attribute %s", attr); 	
+			snprintf(logbuf, MAXLOGBUF, "Found attribute %s", attr); 	
 			ldap_log(LOG_DEBUG, logbuf); 
 			if (strcmp(attr, "cn"))
 				continue;
@@ -193,7 +193,7 @@ check_ldap_user(char *user, unsigned char *pass, const char *ldap_authorization_
 				validgroups = strtok(temp, ",");
 				while (validgroups != NULL)
 				{
-				    sprintf(logbuf, "Attribute value validgroups ? value.bv_val >> %s ? %s", validgroups, value.bv_val); 	
+				    snprintf(logbuf, MAXLOGBUF, "Attribute value validgroups ? value.bv_val >> %s ? %s", validgroups, value.bv_val); 	
 				    ldap_log(LOG_DEBUG, logbuf); 
 				    if (!strcmp(validgroups, value.bv_val))
 				    {
@@ -279,7 +279,7 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
     }
    
     strcpy(info->authenticated_as, (const char *)authas);
-    sprintf(logbuf, "Login SUCCESS. User=%s as %s", info->user_name, authas); 	
+    snprintf(logbuf, MAXLOGBUF, "Login SUCCESS. User=%s as %s", info->user_name, authas); 	
     ldap_log(LOG_ERR, logbuf); 
     //strcpy(info->external_user, info->user_name);
     free(authas);
