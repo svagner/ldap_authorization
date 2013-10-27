@@ -14,6 +14,7 @@
 #define MAXFILTERSTR	128
 #define MAXAUTHSTR	128
 #define MINAUTHSTR	3
+#define MAXCFGLINE	1024
 
 #if !defined(__attribute__) && (defined(__cplusplus) || !defined(__GNUC__)  || __GNUC__ == 2 && __GNUC_MINOR__ < 8)
 #define __attribute__(A)
@@ -288,6 +289,139 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
  
 static int
 ldap_authorization_init(void *p) {
+    /* FIXME */	
+    char *mycnf[] = {
+    	"/usr/local/etc/my.cnf",
+	"/etc/my.cnf",
+	"/var/db/mysql/my.cnf",
+	"/usr/local/mysql/my.cnf",
+	NULL
+    };
+    char logbuf[MAXLOGBUF];
+    FILE *f;
+    char str[MAXCFGLINE];
+    int  res=0, mysect=0, i=0, len=0;
+    char variable[MAXCFGLINE/2];
+    char value[MAXCFGLINE/2];
+    char *config = NULL;
+
+    memset(logbuf, 0, MAXLOGBUF);
+
+    for (i=0; mycnf[i]; i++) {
+	    if (access(mycnf[i], R_OK)==0) {
+		    config = mycnf[i];
+		    break;
+	    };
+    }
+    snprintf(logbuf, MAXLOGBUF, "Config found:%s", config);     
+    ldap_log(LOG_DEBUG, logbuf);
+    memset(logbuf, 0, MAXLOGBUF);
+    if (!config)
+	    return 0;
+
+    f = fopen(config, "r");
+    while (!feof(f)) {
+	    if (fgets(str, MAXCFGLINE, f)!=NULL)
+	    {
+		res = sscanf(str, "%[^ ^\t^\n^=#] = %[^\t^\n;#]", variable, value);    
+		if (!res || variable[0]=='#') continue;
+		if (res==1 && variable[0]=='[' && variable[strlen(variable)-1] == ']') {
+		    if (strcmp(variable, "[mysqld]"))
+		    {
+		        mysect = 0;
+		        continue;
+		    }
+		    else 
+		        mysect = 1;
+		    printf("%s\n", variable);
+		    continue;
+		 } else if (res==1)
+		    continue;
+		 if (mysect) {
+		    len = strlen(value);
+		    for (i=0;i<len;i++)
+		    {
+		        if ((value[i]=='\'' || value[i]=='\"') && i < len-1) {
+			    value[i]=value[i+1];
+			    value[i+1] = '\'';
+			    continue;
+			};
+		    }
+		    i = len-1;
+		    while (value[i]=='\'') {
+		        value[i]='\0';
+		        i--;
+		    }
+		    if (!strcmp(variable, "ldap_authorization_host")) {
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    strncpy(ldap_authorization_host, value, strnlen(value, MAXCFGLINE/2));
+			    continue;
+		    }
+		    if (!strcmp(variable, "ldap_authorization_port")) {
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    ldap_authorization_port = atoi(value); 
+			    continue;
+		    }
+		    if (!strcmp(variable, "ldap_authorization_validgroups")) {
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    strncpy(ldap_authorization_validgroups, value, strnlen(value, MAXCFGLINE/2));
+			    continue;
+		    }
+		    if (!strcmp(variable, "ldap_authorization_binddn")) {
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    strncpy(ldap_authorization_binddn, value, strnlen(value, MAXCFGLINE/2));
+			    continue;
+		    }
+		    if (!strcmp(variable, "ldap_authorization_bindpasswd")) {
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    strncpy(ldap_authorization_bindpasswd, value, strnlen(value, MAXCFGLINE/2));
+			    continue;
+		    }
+		    if (!strcmp(variable, "ldap_authorization_defaultfilter")) {
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    strncpy(ldap_authorization_defaultfilter, value, strnlen(value, MAXCFGLINE/2));
+			    continue;
+		    }
+		    if (!strcmp(variable, "ldap_authorization_timeout")) { 
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    ldap_authorization_timeout = atoi(value);
+			    continue;
+		    }
+		    if (!strcmp(variable, "ldap_authorization_tls")) 
+		    {
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    if (!strcmp(value, "ON"))
+			    {
+				    ldap_authorization_tls = 1;
+				    continue;
+			    } else if (!strcmp(value, "OFF"))
+				    continue;
+			    ldap_authorization_tls = atoi(value);
+			    if (ldap_authorization_tls != 1) {
+				    ldap_authorization_tls = 0;
+				    continue;
+			    }
+		    }
+		}
+	    }   
+    }
+    fclose(f);
     return 0;	
 }
 
