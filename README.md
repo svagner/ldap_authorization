@@ -30,3 +30,7 @@ Create proxy user for give permissions:
 
 For check:
 - SELECT USER(), CURRENT_USER(), @@proxy_user, @@external_user\G
+
+Addition:
+- For print DEBUG messages, please set env MYSQL_LDAP_DEBUG=YES
+- All log messages is gone via syslog

@@ -34,7 +34,7 @@ static void
 ldap_log(int priority, char *msg)
 {
   openlog("ldap_authorization", LOG_PID|LOG_CONS, LOG_USER);
-  if (priority == LOG_DEBUG)  	
+  if (priority == LOG_DEBUG && !strcmp(getenv("MYSQL_LDAP_DEBUG"), "YES"))  	
   {
 	  char logbuf[MAXLOGBUF];
 	  memset(logbuf, 0, MAXLOGBUF);
