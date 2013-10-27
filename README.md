@@ -19,6 +19,7 @@ Configuration option for plugin:
 - ldap_authorization_defaultfilter - filter for limit search in LDAP catalog - isn't required field
 - ldap_authorization_timeout - set timeout for get answer from LDAP - isn't required field
 - ldap_authorization_tls - use TLS connection? - isn't required field. Valid values - 0 or 1. Default - 0.
+- ldap_authorization_debug - print debug message - isn't required field. Valid values - 0 or 1. Default - 0.
 
 For add new user in MySQL server:
 - mysql> DELETE FROM mysql.user where User='';
@@ -32,5 +33,4 @@ For check:
 - SELECT USER(), CURRENT_USER(), @@proxy_user, @@external_user\G
 
 Addition:
-- For print DEBUG messages, please set env MYSQL_LDAP_DEBUG=YES
 - All log messages is gone via syslog

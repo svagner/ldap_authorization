@@ -30,13 +30,14 @@ static char *ldap_authorization_bindpasswd = 0;
 static char *ldap_authorization_defaultfilter = 0;
 static unsigned int ldap_authorization_timeout = 0;
 static char ldap_authorization_tls = 0;
+static char ldap_authorization_debug = 0;
 
 static void
 ldap_log(int priority, char *msg)
 {
   char *env = NULL;	
   openlog("ldap_authorization", LOG_PID|LOG_CONS, LOG_USER);
-  if (priority == LOG_DEBUG && (env = getenv("MYSQL_LDAP_DEBUG"))!=0 && env && !strcmp(env, "YES"))  	
+  if (priority == LOG_DEBUG && ldap_authorization_debug)  	
   {
 	  char logbuf[MAXLOGBUF];
 	  memset(logbuf, 0, MAXLOGBUF);
@@ -422,6 +423,23 @@ ldap_authorization_init(void *p) {
 				    continue;
 			    }
 		    }
+		    if (!strcmp(variable, "ldap_authorization_debug")) 
+		    {
+			    snprintf(logbuf, MAXLOGBUF, "Config set: variable:%s value:%s", variable, value);	
+			    ldap_log(LOG_DEBUG, logbuf);
+			    memset(logbuf, 0, MAXLOGBUF);
+			    if (!strcmp(value, "ON"))
+			    {
+				    ldap_authorization_debug = 1;
+				    continue;
+			    } else if (!strcmp(value, "OFF"))
+				    continue;
+			    ldap_authorization_debug = atoi(value);
+			    if (ldap_authorization_debug != 1) {
+				    ldap_authorization_debug = 0;
+				    continue;
+			    }
+		    }
 		}
 	    }   
     }
@@ -476,6 +494,13 @@ static MYSQL_SYSVAR_BOOL(tls, ldap_authorization_tls,
 		  NULL,                         // update
 		  0);
 
+static MYSQL_SYSVAR_BOOL(debug, ldap_authorization_debug,
+		  PLUGIN_VAR_RQCMDARG,
+		  "Debug output from LDAP plugin.",
+		  NULL, 
+		  NULL,
+		  0);
+
 static struct st_mysql_sys_var* 
 ldap_authorization_variables[]= {
     MYSQL_SYSVAR(auth_host),
@@ -487,6 +512,7 @@ ldap_authorization_variables[]= {
     MYSQL_SYSVAR(defaultfilter),
     MYSQL_SYSVAR(timeout),
     MYSQL_SYSVAR(tls),
+    MYSQL_SYSVAR(debug),
     NULL
 };
 
