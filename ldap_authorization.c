@@ -15,6 +15,7 @@
 #define MAXAUTHSTR	128
 #define MINAUTHSTR	3
 #define MAXCFGLINE	1024
+#define MAXGROUPLIST	512	
 
 #if !defined(__attribute__) && (defined(__cplusplus) || !defined(__GNUC__)  || __GNUC__ == 2 && __GNUC_MINOR__ < 8)
 #define __attribute__(A)
@@ -33,8 +34,9 @@ static char ldap_authorization_tls = 0;
 static void
 ldap_log(int priority, char *msg)
 {
+  char *env = NULL;	
   openlog("ldap_authorization", LOG_PID|LOG_CONS, LOG_USER);
-  if (priority == LOG_DEBUG && !strcmp(getenv("MYSQL_LDAP_DEBUG"), "YES"))  	
+  if (priority == LOG_DEBUG && (env = getenv("MYSQL_LDAP_DEBUG"))!=0 && env && !strcmp(env, "YES"))  	
   {
 	  char logbuf[MAXLOGBUF];
 	  memset(logbuf, 0, MAXLOGBUF);
@@ -190,7 +192,9 @@ check_ldap_user(char *user, unsigned char *pass, const char *ldap_authorization_
 				continue;
 			if ((list_of_values = ldap_get_values_len(ldapsession, entry, attr)) != NULL ) {
 				value = *list_of_values[0];
-				char *temp = ldap_authorization_validgroups;
+				char temp[MAXGROUPLIST];
+				memset(temp, 0, MAXGROUPLIST);
+				strcpy(temp, ldap_authorization_validgroups);
 				validgroups = strtok(temp, ",");
 				while (validgroups != NULL)
 				{
