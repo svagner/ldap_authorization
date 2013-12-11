@@ -238,6 +238,7 @@ check_auth(LD_session *session, char *login, char *password, char *fullname) {
 				}
 			}
 		}
+		res = ldap_next_message(session->sess, res);
 	};
 	ldap_msgfree(res);
 #if LDAP_API_VERSION > 3000
