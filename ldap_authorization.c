@@ -158,7 +158,7 @@ ldap_get_fulldn(LD_session *session, char *username, char *userstr, int username
 }
 
 int
-check_ldap_auth(LD_session *session, char *login, unsigned char *password, char *fullname) {
+check_ldap_auth(LD_session *session, char *login, unsigned char *password, char *fullname, char *authas) {
 	int rc = 0, count = 0;
 	char logbuf[MAXLOGBUF];
 	LDAPMessage *res, *entry;
@@ -166,7 +166,7 @@ check_ldap_auth(LD_session *session, char *login, unsigned char *password, char 
 	BerElement * ber;
 	struct berval **list_of_values;
 	struct berval value;
-	char *validgroups, *fn;
+	char *validgroups;
 	char filter[MAXFILTERSTR];
 	struct berval cred_user;
 
@@ -227,8 +227,9 @@ check_ldap_auth(LD_session *session, char *login, unsigned char *password, char 
 #else   
 							ldap_unbind(session->sess);
 #endif
-							fn = (char *)malloc(strlen(value.bv_val));
-							strcpy(fn, value.bv_val);
+							authas = (char *)malloc(strlen(value.bv_val));
+							memset(authas, 0, strlen(value.bv_val));
+							strcpy(authas, value.bv_val);
 							return RETURN_TRUE;
 						}
 						validgroups = strtok (NULL, ",");
@@ -253,7 +254,7 @@ int
 auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
 {
     unsigned char *pkt;
-    char *authas;
+    char *authas = NULL;
     int pkt_len;
     char auth_string[MAXAUTHSTR];
     char logbuf[MAXLOGBUF];
@@ -295,11 +296,10 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
 	return CR_ERROR;
     };
 
-    if (strnlen(info->auth_string, MAXAUTHSTR)>MINAUTHSTR) {
-	ldap_authorization_basedn = (char *)info->auth_string;
-    } else {
-	ldap_authorization_basedn = "dc=ru";
-    };
+    if (!ldap_authorization_basedn) {
+	ldap_log(LOG_ERR, "BaseDN for LDAP is not set!");    
+	return CR_ERROR;
+    }
 
     if (init_ldap_connection(&ldap_session) == RETURN_FALSE) {
 	    ldap_log(LOG_ERR, "LDAP Initialisation connect return error status. Exiting...");
@@ -317,13 +317,21 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
     }
 //    printf("%s\n", auth_string);
 
-    if (check_ldap_auth(&ldap_session, info->user_name, pkt, auth_string) == RETURN_FALSE) {
+    if (check_ldap_auth(&ldap_session, info->user_name, pkt, auth_string, authas) == RETURN_FALSE) {
 	    ldap_log(LOG_ERR, "Auth user name or password isn't correct. Exiting...");
 	    return CR_ERROR;
     };
 
+    if (!authas) {
+	    ldap_log(LOG_ERR, "\"Authorisation as\" isn't found for user. Exiting...");
+	    return CR_ERROR;
+    }
+
     snprintf(logbuf, MAXLOGBUF, "Login SUCCESS. User=%s as %s", info->user_name, authas); 	
     ldap_log(LOG_DEBUG, logbuf); 
+    strcpy(info->external_user, info->user_name);
+    strcpy(info->authenticated_as, authas);
+    free(authas);
     //strcpy(info->external_user, info->user_name);
     return CR_OK;
 };
