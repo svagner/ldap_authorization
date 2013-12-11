@@ -33,7 +33,7 @@ typedef struct {
 static char *ldap_authorization_host = 0;	    /* 127.0.0.1 */
 static unsigned int ldap_authorization_port = 0;   /* 3389 */
 static char *ldap_authorization_validgroups = 0;    /* */
-static char *ldap_authorization_basedn = NULL;
+static char *ldap_authorization_basedn = 0;
 static char *ldap_authorization_binddn = 0;
 static char *ldap_authorization_bindpasswd = 0;
 static char *ldap_authorization_defaultfilter = 0;
@@ -157,12 +157,12 @@ ldap_get_fulldn(LD_session *session, char *username, char *userstr, int username
 	return RETURN_TRUE;
 }
 
-int
-check_ldap_auth(LD_session *session, char *login, unsigned char *password, char *fullname, char *authas) {
+static char*
+check_ldap_auth(LD_session *session, char *login, unsigned char *password, char *fullname) {
 	int rc = 0, count = 0;
 	char logbuf[MAXLOGBUF];
 	LDAPMessage *res, *entry;
-	char *attr;
+	char *attr, *dn;
 	BerElement * ber;
 	struct berval **list_of_values;
 	struct berval value;
@@ -182,13 +182,13 @@ check_ldap_auth(LD_session *session, char *login, unsigned char *password, char 
 	if((rc = ldap_sasl_bind_s(session->sess, fullname, ldap_authorization_type, &cred_user, NULL, NULL, NULL))!=LDAP_SUCCESS) {
 		snprintf(logbuf, MAXLOGBUF, "Ldap server %s authentificate with method %s failed: %s", ldap_authorization_host, ldap_authorization_type, ldap_err2string(rc));  
 		ldap_log(LOG_DEBUG, logbuf);
-		return RETURN_FALSE;
+		return RETURN_TRUE;
 	};
 #else	
 	if((rc = ldap_bind_s(session->sess, fullname, password, LDAP_AUTH_SIMPLE))!=LDAP_SUCCESS) {
 		snprintf(logbuf, MAXLOGBUF, "Ldap server %s authentificate failed: %s", ldap_authorization_host, ldap_err2string(rc));  
 		ldap_log(LOG_DEBUG, logbuf);
-		return RETURN_FALSE;
+		return RETURN_TRUE;
 	}
 #endif
 
@@ -227,10 +227,10 @@ check_ldap_auth(LD_session *session, char *login, unsigned char *password, char 
 #else   
 							ldap_unbind(session->sess);
 #endif
-							authas = (char *)malloc(strlen(value.bv_val));
-							memset(authas, 0, strlen(value.bv_val));
-							strcpy(authas, value.bv_val);
-							return RETURN_TRUE;
+							dn = malloc((int)strlen(value.bv_val)*sizeof(char));
+							memset(dn, 0, (int)strlen(value.bv_val)*sizeof(char));
+							strcpy(dn, value.bv_val);
+							return dn;
 						}
 						validgroups = strtok (NULL, ",");
 					}
@@ -247,7 +247,7 @@ check_ldap_auth(LD_session *session, char *login, unsigned char *password, char 
 #else   
 	ldap_unbind(session->sess);
 #endif
-	return RETURN_FALSE;
+	return RETURN_TRUE;
 }
 
 int
@@ -317,15 +317,11 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
     }
 //    printf("%s\n", auth_string);
 
-    if (check_ldap_auth(&ldap_session, info->user_name, pkt, auth_string, authas) == RETURN_FALSE) {
-	    ldap_log(LOG_ERR, "Auth user name or password isn't correct. Exiting...");
+    if ((authas = check_ldap_auth(&ldap_session, info->user_name, pkt, auth_string)) == RETURN_TRUE) {
+	    snprintf(logbuf, MAXLOGBUF, "Auth user name or password isn't correct (dn addr: %p). Exiting...", authas);
+	    ldap_log(LOG_ERR, logbuf);
 	    return CR_ERROR;
     };
-
-    if (!authas) {
-	    ldap_log(LOG_ERR, "\"Authorisation as\" isn't found for user. Exiting...");
-	    return CR_ERROR;
-    }
 
     snprintf(logbuf, MAXLOGBUF, "Login SUCCESS. User=%s as %s", info->user_name, authas); 	
     ldap_log(LOG_DEBUG, logbuf); 
@@ -355,6 +351,11 @@ static MYSQL_SYSVAR_STR(validgroups, ldap_authorization_validgroups,
 		  PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
 		    "List of valid groups for current mysql node.",
 		      NULL, NULL, "users,administrators,mysqlgroups");
+
+static MYSQL_SYSVAR_STR(basedn, ldap_authorization_basedn,
+		  PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
+		    "BaseDN for LDAP catalog.",
+		      NULL, NULL, "dc=example,dc=net");
 
 static MYSQL_SYSVAR_STR(binddn, ldap_authorization_binddn,
 		  PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
@@ -401,6 +402,7 @@ ldap_authorization_variables[]= {
     MYSQL_SYSVAR(port),
     MYSQL_SYSVAR(validgroups),
     MYSQL_SYSVAR(binddn),
+    MYSQL_SYSVAR(basedn),
     MYSQL_SYSVAR(bindpasswd),
     MYSQL_SYSVAR(defaultfilter),
     MYSQL_SYSVAR(timeout),
