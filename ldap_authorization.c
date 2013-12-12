@@ -201,7 +201,7 @@ check_ldap_auth(LD_session *session, char *login, unsigned char *password, char 
 		return RETURN_TRUE;
 	}
 
-	for (entry = ldap_first_entry(session->sess,res); entry!=NULL && count<ldap_count_messages(session->sess, res); entry=ldap_next_entry(session->sess, res)) {
+	for (entry = ldap_first_entry(session->sess,res); entry!=NULL && count<=ldap_count_messages(session->sess, res); entry=ldap_next_entry(session->sess, res)) {
 		count++;
 		for(attr = ldap_first_attribute(session->sess,entry,&ber); attr != NULL ; attr=ldap_next_attribute(session->sess,entry,ber)) {
 			snprintf(logbuf, MAXLOGBUF, "Found attribute %s", attr);        
