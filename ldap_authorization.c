@@ -306,7 +306,7 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
     char ldap_hosts[MAXGROUPLIST];
     memset(ldap_hosts, 0, MAXGROUPLIST);
     strcpy(ldap_hosts, ldap_authorization_host);
-    ldap_host = strtok(temp, ",");
+    ldap_host = strtok(ldap_hosts, ",");
 
     while (ldap_host != NULL)
     {
