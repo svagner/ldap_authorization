@@ -11,7 +11,7 @@ Installation:
     mysql> INSTALL PLUGIN ldap_authorization SONAME 'ldap_authorization.so';
 
 Configuration option for plugin:
-- ldap_authorization_host - like 'ldap://127.0.0.1' - is required field
+- ldap_authorization_host - like 'ldap://127.0.0.1,ldap://192.168.0.1' - is required field
 - ldap_authorization_port - int - isn't required field
 - ldap_authorization_validgroups - field for list of valid groups for current mysql node. Groups are separated by commas. This group must be using for 'CREATE user' statement - is required field
 - ldap_authorization_binddn - login who can get access to LDAP catalog - is required field
@@ -32,7 +32,7 @@ ldap_authorization_binddn='cn=readonly,dc=example,dc=com'
 
 ldap_authorization_basedn='dc=example,dc=com'
 
-ldap_authorization_auth_host='ldap://192.168.0.1'
+ldap_authorization_auth_host='ldap://192.168.0.1,ldap://192.168.0.2'
 
 ldap_authorization_validgroups='ldap_group1,ldap_group2'
 
