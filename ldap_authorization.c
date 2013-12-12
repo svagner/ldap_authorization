@@ -107,6 +107,7 @@ set_ldap_options(LD_session *session) {
 			ldap_log(LOG_WARNING, logbuf);
 		}
 	}
+	return RETURN_TRUE;
 }
 
 int
@@ -124,6 +125,8 @@ ldap_get_fulldn(LD_session *session, char *username, char *userstr, int username
 	cred.bv_len = strlen(ldap_authorization_bindpasswd);
 #if LDAP_API_VERSION > 3000	
 	if((rc = ldap_sasl_bind_s(session->sess, ldap_authorization_binddn, ldap_authorization_type, &cred, NULL, NULL, NULL))!=LDAP_SUCCESS) {
+
+
 		snprintf(logbuf, MAXLOGBUF, "Ldap server %s authentificate with method %s failed: %s", ldap_authorization_host, ldap_authorization_type, ldap_err2string(rc));  
 		ldap_log(LOG_DEBUG, logbuf);
 		return RETURN_FALSE;
@@ -255,7 +258,8 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
 {
     unsigned char *pkt;
     char *authas = NULL, *ldap_host = NULL;
-    int pkt_len, init_ldap = RETURN_FALSE;
+    int pkt_len, num_gopt = 0;
+    int last_error = 0;
     char auth_string[MAXAUTHSTR];
     char logbuf[MAXLOGBUF];
     LD_session ldap_session;
@@ -310,32 +314,51 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
 
     while (ldap_host != NULL)
     {
-	if ((init_ldap = init_ldap_connection(&ldap_session, ldap_host)) == RETURN_TRUE) 
-	    break;
-	ldap_host = strtok (NULL, ",");
-    }
+	if (init_ldap_connection(&ldap_session, ldap_host) == RETURN_FALSE) { 
+	    snprintf(logbuf, MAXLOGBUF, "LDAP Initialisation connect with host %s return error status. Exiting...", ldap_host); 	
+	    ldap_log(LOG_DEBUG, logbuf); 
+	    ldap_host = strtok (NULL, ",");
+	    continue;
+	}; 
 
-    if (init_ldap) {
-	    ldap_log(LOG_ERR, "LDAP Initialisation connect return error status. Exiting...");
-	    return CR_ERROR;
-    };
-
-    if (set_ldap_options(&ldap_session) == RETURN_FALSE) {
+	if (set_ldap_options(&ldap_session) == RETURN_FALSE) {
 	    ldap_log(LOG_ERR, "LDAP Set options return error status. Exiting...");
-	    return CR_ERROR;
-    };
+	    ldap_host = strtok (NULL, ",");
+	    continue;
+	};
 
-    if (ldap_get_fulldn(&ldap_session, info->user_name, auth_string, MAXAUTHSTR) == RETURN_FALSE) {
+	if (ldap_get_fulldn(&ldap_session, info->user_name, auth_string, MAXAUTHSTR) == RETURN_FALSE) {
+	    ldap_get_option(ldap_session.sess, LDAP_OPT_ERROR_NUMBER, &last_error);
+	    if (last_error == LDAP_SERVER_DOWN) {
+		    num_gopt = 0;
+		    snprintf(logbuf, MAXLOGBUF, "Connect with server %s timed out.", ldap_host); 	
+		    ldap_log(LOG_DEBUG, logbuf); 
+		    ldap_host = strtok (NULL, ",");
+		    continue;
+	    }
 	    ldap_log(LOG_ERR, "LDAP User isn't found in catalog. Exiting...");
 	    return CR_ERROR;
-    }
-//    printf("%s\n", auth_string);
+	}
 
-    if ((authas = check_ldap_auth(&ldap_session, info->user_name, pkt, auth_string)) == RETURN_TRUE) {
+	if ((authas = check_ldap_auth(&ldap_session, info->user_name, pkt, auth_string)) == RETURN_TRUE) {
+	    ldap_get_option(ldap_session.sess, LDAP_OPT_ERROR_NUMBER, &last_error);
+	    if (last_error == LDAP_SERVER_DOWN) {
+		    snprintf(logbuf, MAXLOGBUF, "Connect with server %s timed out.", ldap_host); 	
+		    ldap_log(LOG_DEBUG, logbuf); 
+		    ldap_host = strtok (NULL, ",");
+		    continue;
+	    }
 	    snprintf(logbuf, MAXLOGBUF, "Auth user name or password isn't correct (dn addr: %p). Exiting...", authas);
 	    ldap_log(LOG_ERR, logbuf);
 	    return CR_ERROR;
-    };
+	} else {
+	    num_gopt++;
+	    break;
+	};
+	return CR_ERROR;
+    }
+
+    if (!num_gopt) return CR_ERROR;
 
     snprintf(logbuf, MAXLOGBUF, "Login SUCCESS. User=%s as %s", info->user_name, authas); 	
     ldap_log(LOG_DEBUG, logbuf); 
