@@ -59,12 +59,12 @@ ldap_log(int priority, char *msg)
 };
 
 static int
-init_ldap_connection(LD_session *session) {
+init_ldap_connection(LD_session *session, char *ldap_host) {
 /* Init LDAP */
 #ifdef LDAP_API_FEATURE_X_OPENLDAP      
-	if (ldap_authorization_host != NULL && strchr(ldap_authorization_host, '/')) 
+	if (ldap_host != NULL && strchr(ldap_host, '/')) 
 	{
-		if(ldap_initialize(&session->sess, ldap_authorization_host)!=LDAP_SUCCESS)
+		if(ldap_initialize(&session->sess, ldap_host)!=LDAP_SUCCESS)
 		{
 			ldap_log(LOG_ERR, "Ldap connection initialize return fail status");
 			return RETURN_FALSE;
@@ -74,11 +74,11 @@ init_ldap_connection(LD_session *session) {
 		ldap_log(LOG_ERR, "Ldap connection initialize return fail status");
 		return RETURN_FALSE;
     #else
-		session->sess = ldap_init(ldap_authorization_host, &ldap_authorization_port);
+		session->sess = ldap_init(ldap_host, &ldap_authorization_port);
     #endif
 	}
 #else
-	session->sess = ldap_open(ldap_authorization_host, ldap_authorization_port);
+	session->sess = ldap_open(ldap_host, ldap_authorization_port);
 #endif
 	if (session->sess == NULL) 
 	{
@@ -254,8 +254,8 @@ int
 auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
 {
     unsigned char *pkt;
-    char *authas = NULL;
-    int pkt_len;
+    char *authas = NULL, *ldap_host = NULL;
+    int pkt_len, init_ldap = RETURN_FALSE;
     char auth_string[MAXAUTHSTR];
     char logbuf[MAXLOGBUF];
     LD_session ldap_session;
@@ -280,12 +280,14 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
 
     info->password_used= PASSWORD_USED_YES;
 
+
     /* Check parametrs */
     if (!ldap_authorization_host)
     {
 	ldap_log(LOG_ERR, "Config node \"ldap_authorization_host\" isn't correct");
 	return CR_ERROR;
-    }
+    };
+
     if (!ldap_authorization_binddn) {
 	ldap_log(LOG_ERR, "BindDN for LDAP is not set!");
 	return CR_ERROR;
@@ -301,7 +303,19 @@ auth_ldap_server (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
 	return CR_ERROR;
     }
 
-    if (init_ldap_connection(&ldap_session) == RETURN_FALSE) {
+    char ldap_hosts[MAXGROUPLIST];
+    memset(ldap_hosts, 0, MAXGROUPLIST);
+    strcpy(ldap_hosts, ldap_authorization_host);
+    ldap_host = strtok(temp, ",");
+
+    while (ldap_host != NULL)
+    {
+	if ((init_ldap = init_ldap_connection(&ldap_session, ldap_host)) == RETURN_TRUE) 
+	    break;
+	ldap_host = strtok (NULL, ",");
+    }
+
+    if (init_ldap) {
 	    ldap_log(LOG_ERR, "LDAP Initialisation connect return error status. Exiting...");
 	    return CR_ERROR;
     };
